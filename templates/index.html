@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Welkom{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1 class="hero-title">Beleggingen Belastingcalculator</h1>
+    <p class="hero-subtitle">
+        Bereken eenvoudig hoeveel aandelen u kunt verkopen zonder de Belgische
+        meerwaardebelasting te overschrijden. Gebaseerd op het FIFO-principe.
+    </p>
+    <div class="hero-actions">
+        <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">Gratis Starten</a>
+        <a href="{{ url_for('login') }}" class="btn btn-secondary btn-lg">Inloggen</a>
+    </div>
+</div>
+
+<div class="features-grid">
+    <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3 class="feature-title">FIFO Berekening</h3>
+        <p class="feature-description">
+            Automatische berekening van de kostprijs volgens het First In, First Out principe.
+            Uw oudste aankopen worden altijd eerst verkocht.
+        </p>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-icon">💰</div>
+        <h3 class="feature-title">Belastingoptimalisatie</h3>
+        <p class="feature-description">
+            Ontdek exact hoeveel aandelen u kunt verkopen binnen de €10.000 vrijstelling
+            zonder belasting te betalen.
+        </p>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3 class="feature-title">Interactieve Grafieken</h3>
+        <p class="feature-description">
+            Visualiseer uw winst en verlies in functie van de verkoopprijs met
+            duidelijke aanduiding van de belastinggrens.
+        </p>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3 class="feature-title">Veilige Opslag</h3>
+        <p class="feature-description">
+            Uw portfolio gegevens worden versleuteld opgeslagen en zijn uitsluitend
+            toegankelijk voor u.
+        </p>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3 class="feature-title">Meerdere Portfolio's</h3>
+        <p class="feature-description">
+            Beheer meerdere portfolio's met verschillende assets.
+            Elke belegging apart bijhouden en analyseren.
+        </p>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-icon">🇧🇪</div>
+        <h3 class="feature-title">Belgische Regelgeving</h3>
+        <p class="feature-description">
+            Specifiek ontworpen voor de Belgische meerwaardebelasting met
+            de correcte limieten en tarieven.
+        </p>
+    </div>
+</div>
+
+<div class="card mt-lg">
+    <div class="card-header">
+        <h2 class="card-title">Hoe werkt het?</h2>
+    </div>
+    <div class="info-box">
+        <div class="info-box-title">
+            <span>ℹ️</span>
+            <span>Belgische Meerwaardebelasting</span>
+        </div>
+        <p>
+            In België is er een <strong>vrijstelling van €10.000</strong> per jaar voor meerwaarden op aandelen.
+            Meerwaarden boven dit bedrag worden belast aan <strong>10%</strong>.
+        </p>
+        <p>
+            Deze calculator gebruikt het <strong>FIFO-principe</strong> (First In, First Out):
+            bij verkoop worden eerst de oudst aangekochte aandelen verkocht, wat de kostprijs bepaalt.
+        </p>
+        <p>
+            Met deze tool berekent u eenvoudig:
+        </p>
+        <ul style="margin-left: 1.5rem; color: var(--color-gray-600);">
+            <li>Hoeveel aandelen u kunt verkopen binnen de €10.000 vrijstelling</li>
+            <li>Meerjarenplanning voor optimale belastinguitstap</li>
+            <li>Wat de belasting is als u boven de limiet gaat</li>
+            <li>Uw nettoresultaat na eventuele belasting</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

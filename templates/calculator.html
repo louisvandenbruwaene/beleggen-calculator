@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+
+{% block title %}Calculator - {{ asset.name }}{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <a href="{{ url_for('view_portfolio', portfolio_id=asset.portfolio_id) }}" class="text-muted" style="font-size: 0.875rem;">
+            ← Terug naar Portfolio
+        </a>
+        <h1>Belastingcalculator</h1>
+        <p class="text-muted">{{ asset.name }}{% if asset.isin %} ({{ asset.isin }}){% endif %}</p>
+    </div>
+</div>
+
+<!-- Asset Summary -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Beschikbaar</div>
+        <div class="stat-value">{{ "%.0f"|format(total_available) }} stuks</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Totale Kostprijs</div>
+        <div class="stat-value">€{{ "%.2f"|format(total_cost) }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Gem. Kostprijs / stuk</div>
+        <div class="stat-value">€{{ "%.2f"|format(total_cost / total_available if total_available > 0 else 0) }}</div>
+    </div>
+</div>
+
+<!-- Tax Rules Info -->
+<div class="info-box">
+    <div class="info-box-title">
+        <span>📋</span>
+        <span>Belgische Belastingregels</span>
+    </div>
+    <p>
+        <strong>Vrijstelling:</strong> €{{ "{:,.0f}".format(base_limit) }} meerwaarde per jaar belastingvrij.
+        <strong>Overdracht:</strong> Ongebruikte ruimte (max €{{ "{:,.0f}".format(carryover_max) }}) mag naar volgend jaar.
+        <strong>Maximum:</strong> €{{ "{:,.0f}".format(absolute_max) }} met volledige opbouw.
+        <strong>Tarief:</strong> {{ "%.0f"|format(tax_rate) }}% op meerwaarde boven de vrijstelling.
+    </p>
+    <p>
+        <strong>FIFO:</strong> Bij verkoop worden de oudste aankopen eerst verkocht, wat de kostprijs bepaalt.
+    </p>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab active" onclick="showTab('single')">Eenmalige Verkoop</button>
+    <button class="tab" onclick="showTab('multiyear')">Meerjarenplan</button>
+</div>
+
+<!-- Single Year Tab -->
+<div class="tab-content active" id="tab-single">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Verkoopberekening</h2>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="salePrice">Verkoopprijs per stuk (€)</label>
+                <input type="number" id="salePrice" class="form-input"
+                       placeholder="bijv. 55.00" min="0.01" step="0.01"
+                       value="{{ "%.2f"|format(total_cost / total_available * 1.1 if total_available > 0 else 50) }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="yearlyLimit">Jaarlijkse vrijstelling (€)</label>
+                <select id="yearlyLimit" class="form-input">
+                    <option value="10000">€10.000 (jaar 1)</option>
+                    <option value="11000">€11.000 (jaar 2, met €1.000 overdracht)</option>
+                    <option value="12000">€12.000 (jaar 3)</option>
+                    <option value="13000">€13.000 (jaar 4)</option>
+                    <option value="14000">€14.000 (jaar 5)</option>
+                    <option value="15000">€15.000 (maximum)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="customQuantity">Specifiek aantal verkopen</label>
+                <input type="number" id="customQuantity" class="form-input"
+                       placeholder="Optioneel"
+                       min="1" max="{{ total_available|int }}" step="1">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="targetRevenue">Of: bedrag ophalen (€)</label>
+                <input type="number" id="targetRevenue" class="form-input"
+                       placeholder="Optioneel, bijv. 5000"
+                       min="1" step="1">
+            </div>
+        </div>
+
+        <button id="calculateBtn" class="btn btn-primary btn-lg">
+            Bereken Scenario's
+        </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" style="display: none;">
+        <h2 class="mb-md">Resultaten</h2>
+
+        <div class="calculator-grid">
+            <!-- Scenario 1: Within Limit -->
+            <div class="scenario-card within-limit" id="scenario1">
+                <div class="scenario-title">
+                    <span>Scenario 1: Binnen Vrijstelling</span>
+                    <span class="scenario-badge badge-success">Geen Belasting</span>
+                </div>
+                <p class="text-muted mb-md" style="font-size: 0.875rem;">
+                    Maximum te verkopen zonder de vrijstelling te overschrijden
+                </p>
+                <div class="scenario-details">
+                    <div class="scenario-row">
+                        <span class="scenario-label">Te verkopen</span>
+                        <span class="scenario-value" id="s1Quantity">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Opbrengst</span>
+                        <span class="scenario-value" id="s1Revenue">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Kostprijs (FIFO)</span>
+                        <span class="scenario-value" id="s1CostBasis">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Meerwaarde</span>
+                        <span class="scenario-value" id="s1Gain">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Netto Ontvangst</span>
+                        <span class="scenario-value" id="s1Net">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scenario 2: Sell All -->
+            <div class="scenario-card" id="scenario2">
+                <div class="scenario-title">
+                    <span>Scenario 2: Volledige Verkoop</span>
+                    <span class="scenario-badge" id="s2Badge">-</span>
+                </div>
+                <p class="text-muted mb-md" style="font-size: 0.875rem;">
+                    Alle beschikbare aandelen verkopen
+                </p>
+                <div class="scenario-details">
+                    <div class="scenario-row">
+                        <span class="scenario-label">Te verkopen</span>
+                        <span class="scenario-value" id="s2Quantity">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Opbrengst</span>
+                        <span class="scenario-value" id="s2Revenue">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Kostprijs (FIFO)</span>
+                        <span class="scenario-value" id="s2CostBasis">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Meerwaarde</span>
+                        <span class="scenario-value" id="s2Gain">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Belastbaar</span>
+                        <span class="scenario-value" id="s2Taxable">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Belasting (10%)</span>
+                        <span class="scenario-value text-error" id="s2Tax">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Netto Ontvangst</span>
+                        <span class="scenario-value" id="s2Net">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Scenarios -->
+        <div id="customScenarios" class="calculator-grid mt-lg" style="display: none;">
+            <!-- Custom Quantity -->
+            <div class="scenario-card" id="scenario3" style="display: none;">
+                <div class="scenario-title">
+                    <span>Specifiek Aantal</span>
+                    <span class="scenario-badge" id="s3Badge">-</span>
+                </div>
+                <div class="scenario-details">
+                    <div class="scenario-row">
+                        <span class="scenario-label">Te verkopen</span>
+                        <span class="scenario-value" id="s3Quantity">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Opbrengst</span>
+                        <span class="scenario-value" id="s3Revenue">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Meerwaarde</span>
+                        <span class="scenario-value" id="s3Gain">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Belasting</span>
+                        <span class="scenario-value" id="s3Tax">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Netto Ontvangst</span>
+                        <span class="scenario-value" id="s3Net">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Target Revenue -->
+            <div class="scenario-card" id="scenario4" style="display: none;">
+                <div class="scenario-title">
+                    <span>Doel Bedrag</span>
+                    <span class="scenario-badge" id="s4Badge">-</span>
+                </div>
+                <div class="scenario-details">
+                    <div class="scenario-row">
+                        <span class="scenario-label">Benodigd aantal</span>
+                        <span class="scenario-value" id="s4Quantity">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Opbrengst</span>
+                        <span class="scenario-value" id="s4Revenue">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Meerwaarde</span>
+                        <span class="scenario-value" id="s4Gain">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Belasting</span>
+                        <span class="scenario-value" id="s4Tax">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Netto Ontvangst</span>
+                        <span class="scenario-value" id="s4Net">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="calculator-grid mt-lg">
+            <div class="chart-container">
+                <h3 class="chart-title">Meerwaarde per Verkoopprijs</h3>
+                <div class="chart-wrapper">
+                    <canvas id="gainChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3 class="chart-title">Max. Verkoop Binnen Vrijstelling</h3>
+                <div class="chart-wrapper">
+                    <canvas id="quantityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Multi-Year Tab -->
+<div class="tab-content" id="tab-multiyear">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Meerjarenplanning</h2>
+            <p class="card-subtitle">Plan uw verkoop over meerdere jaren voor optimale belastingefficiëntie</p>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="myStartPrice">Startprijs per stuk (€)</label>
+                <input type="number" id="myStartPrice" class="form-input"
+                       value="{{ "%.2f"|format(total_cost / total_available * 1.1 if total_available > 0 else 50) }}"
+                       min="0.01" step="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="myYears">Aantal jaren</label>
+                <select id="myYears" class="form-input">
+                    <option value="1">1 jaar</option>
+                    <option value="2">2 jaren</option>
+                    <option value="3" selected>3 jaren</option>
+                    <option value="4">4 jaren</option>
+                    <option value="5">5 jaren</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="myPriceIncrease">Jaarlijkse prijsstijging (%)</label>
+                <input type="number" id="myPriceIncrease" class="form-input"
+                       value="5" min="0" max="50" step="1">
+            </div>
+        </div>
+
+        <h3 class="mb-md">Kies Strategie</h3>
+        <div class="strategy-grid">
+            <div class="strategy-card selected" data-strategy="build_carryover" onclick="selectStrategy(this)">
+                <div class="strategy-title">
+                    <span>📈</span>
+                    <span>Opbouw Overdracht</span>
+                </div>
+                <p class="strategy-description">
+                    Blijf elk jaar €1.000 onder de vrijstelling om overdracht op te bouwen.
+                    Ideaal als u niet alles hoeft te verkopen.
+                </p>
+                <div class="strategy-highlight">
+                    Jaar 1: €9.000 → Jaar 2: €10.000 → Jaar 3: €11.000 → ...
+                </div>
+            </div>
+
+            <div class="strategy-card" data-strategy="full_extraction" onclick="selectStrategy(this)">
+                <div class="strategy-title">
+                    <span>💰</span>
+                    <span>Volledige Uitname</span>
+                </div>
+                <p class="strategy-description">
+                    Gebruik de volledige vrijstelling en verkoop alles in het laatste jaar.
+                    Minimale belasting bij volledige liquidatie.
+                </p>
+                <div class="strategy-highlight">
+                    Optimaal voor maximale uitname met minimale belasting
+                </div>
+            </div>
+        </div>
+
+        <button id="calculateMultiYearBtn" class="btn btn-primary btn-lg">
+            Bereken Meerjarenplan
+        </button>
+    </div>
+
+    <!-- Multi-Year Results -->
+    <div id="multiYearResults" style="display: none;">
+        <h2 class="mb-md">Meerjarenplan</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Totaal Verkocht</div>
+                <div class="stat-value" id="myTotalSold">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Totale Opbrengst</div>
+                <div class="stat-value" id="myTotalRevenue">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Totale Belasting</div>
+                <div class="stat-value" id="myTotalTax">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Netto Ontvangst</div>
+                <div class="stat-value" id="myTotalNet">-</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-container">
+                <table class="plan-table">
+                    <thead>
+                        <tr>
+                            <th>Jaar</th>
+                            <th>Prijs</th>
+                            <th>Vrijstelling</th>
+                            <th>Verkoop</th>
+                            <th>Opbrengst</th>
+                            <th>Meerwaarde</th>
+                            <th>Belasting</th>
+                            <th>Resterend</th>
+                        </tr>
+                    </thead>
+                    <tbody id="multiYearTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="chart-container mt-lg">
+            <h3 class="chart-title">Verkoop per Jaar</h3>
+            <div class="chart-wrapper">
+                <canvas id="multiYearChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const assetId = {{ asset.id }};
+const totalAvailable = {{ total_available }};
+const totalCost = {{ total_cost }};
+const baseLimit = {{ base_limit }};
+
+let gainChart = null;
+let quantityChart = null;
+let multiYearChart = null;
+let selectedStrategy = 'build_carryover';
+
+// Tab switching
+function showTab(tabId) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+    document.getElementById('tab-' + tabId).classList.add('active');
+}
+
+// Strategy selection
+function selectStrategy(card) {
+    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedStrategy = card.dataset.strategy;
+}
+
+// Format currency
+function formatCurrency(value) {
+    return '€' + value.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Single year calculation
+document.getElementById('calculateBtn').addEventListener('click', calculate);
+
+async function calculate() {
+    const salePrice = parseFloat(document.getElementById('salePrice').value);
+    const yearlyLimit = parseFloat(document.getElementById('yearlyLimit').value);
+    const customQty = document.getElementById('customQuantity').value;
+    const targetRev = document.getElementById('targetRevenue').value;
+
+    if (!salePrice || salePrice <= 0) {
+        alert('Voer een geldige verkoopprijs in.');
+        return;
+    }
+
+    document.getElementById('calculateBtn').textContent = 'Berekenen...';
+    document.getElementById('calculateBtn').disabled = true;
+
+    try {
+        const calcResponse = await fetch('/api/calculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                asset_id: assetId,
+                sale_price: salePrice,
+                yearly_limit: yearlyLimit,
+                quantity: customQty ? parseInt(customQty) : null,
+                target_revenue: targetRev ? parseFloat(targetRev) : null
+            })
+        });
+        const calcData = await calcResponse.json();
+
+        const chartResponse = await fetch('/api/chart-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                asset_id: assetId,
+                min_price: Math.max(1, totalCost / totalAvailable * 0.5),
+                max_price: totalCost / totalAvailable * 2,
+                steps: 40,
+                yearly_limit: yearlyLimit
+            })
+        });
+        const chartData = await chartResponse.json();
+
+        updateScenarios(calcData);
+        updateCharts(chartData, salePrice);
+
+        document.getElementById('resultsSection').style.display = 'block';
+        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Er is een fout opgetreden.');
+    }
+
+    document.getElementById('calculateBtn').textContent = 'Bereken Scenario\'s';
+    document.getElementById('calculateBtn').disabled = false;
+}
+
+function updateScenarios(data) {
+    // Scenario 1: Within limit
+    if (data.within_limit) {
+        const s1 = data.within_limit;
+        document.getElementById('s1Quantity').textContent = s1.units + ' stuks';
+        document.getElementById('s1Revenue').textContent = formatCurrency(s1.revenue);
+        document.getElementById('s1CostBasis').textContent = formatCurrency(s1.cost_basis);
+        document.getElementById('s1Gain').textContent = formatCurrency(s1.gain);
+        document.getElementById('s1Gain').className = 'scenario-value ' + (s1.gain >= 0 ? 'text-success' : 'text-error');
+        document.getElementById('s1Net').textContent = formatCurrency(s1.net);
+    }
+
+    // Scenario 2: Sell all
+    if (data.sell_all) {
+        const s2 = data.sell_all;
+        document.getElementById('s2Quantity').textContent = s2.units + ' stuks';
+        document.getElementById('s2Revenue').textContent = formatCurrency(s2.revenue);
+        document.getElementById('s2CostBasis').textContent = formatCurrency(s2.cost_basis);
+        document.getElementById('s2Gain').textContent = formatCurrency(s2.gain);
+        document.getElementById('s2Gain').className = 'scenario-value ' + (s2.gain >= 0 ? 'text-success' : 'text-error');
+        document.getElementById('s2Taxable').textContent = formatCurrency(s2.taxable);
+        document.getElementById('s2Tax').textContent = formatCurrency(s2.tax);
+        document.getElementById('s2Net').textContent = formatCurrency(s2.net);
+
+        const badge = document.getElementById('s2Badge');
+        const card = document.getElementById('scenario2');
+        if (s2.tax === 0) {
+            badge.textContent = 'Geen Belasting';
+            badge.className = 'scenario-badge badge-success';
+            card.classList.add('within-limit');
+            card.classList.remove('exceeds-limit');
+        } else {
+            badge.textContent = 'Belast';
+            badge.className = 'scenario-badge badge-warning';
+            card.classList.add('exceeds-limit');
+            card.classList.remove('within-limit');
+        }
+    }
+
+    // Custom scenarios
+    const customDiv = document.getElementById('customScenarios');
+    let showCustom = false;
+
+    if (data.custom_quantity) {
+        showCustom = true;
+        const s3 = data.custom_quantity;
+        document.getElementById('scenario3').style.display = 'block';
+        document.getElementById('s3Quantity').textContent = s3.units + ' stuks';
+        document.getElementById('s3Revenue').textContent = formatCurrency(s3.revenue);
+        document.getElementById('s3Gain').textContent = formatCurrency(s3.gain);
+        document.getElementById('s3Tax').textContent = formatCurrency(s3.tax);
+        document.getElementById('s3Net').textContent = formatCurrency(s3.net);
+        document.getElementById('s3Badge').textContent = s3.tax === 0 ? 'Geen Belasting' : 'Belast';
+        document.getElementById('s3Badge').className = 'scenario-badge ' + (s3.tax === 0 ? 'badge-success' : 'badge-warning');
+    } else {
+        document.getElementById('scenario3').style.display = 'none';
+    }
+
+    if (data.target_revenue) {
+        showCustom = true;
+        const s4 = data.target_revenue;
+        document.getElementById('scenario4').style.display = 'block';
+        document.getElementById('s4Quantity').textContent = s4.units + ' stuks';
+        document.getElementById('s4Revenue').textContent = formatCurrency(s4.revenue);
+        document.getElementById('s4Gain').textContent = formatCurrency(s4.gain);
+        document.getElementById('s4Tax').textContent = formatCurrency(s4.tax);
+        document.getElementById('s4Net').textContent = formatCurrency(s4.net);
+        document.getElementById('s4Badge').textContent = s4.tax === 0 ? 'Geen Belasting' : 'Belast';
+        document.getElementById('s4Badge').className = 'scenario-badge ' + (s4.tax === 0 ? 'badge-success' : 'badge-warning');
+    } else {
+        document.getElementById('scenario4').style.display = 'none';
+    }
+
+    customDiv.style.display = showCustom ? 'grid' : 'none';
+}
+
+function updateCharts(data, currentPrice) {
+    const analysis = data.analysis;
+    const labels = analysis.map(d => '€' + d.price.toFixed(0));
+    const gains = analysis.map(d => d.gain_if_sell_all);
+    const maxShares = analysis.map(d => d.max_units_within_limit);
+
+    if (gainChart) gainChart.destroy();
+    if (quantityChart) quantityChart.destroy();
+
+    // Gain Chart
+    const gainCtx = document.getElementById('gainChart').getContext('2d');
+    gainChart = new Chart(gainCtx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Meerwaarde (volledige verkoop)',
+                    data: gains,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2
+                },
+                {
+                    label: 'Vrijstelling €' + data.yearly_limit.toLocaleString(),
+                    data: analysis.map(() => data.yearly_limit),
+                    borderColor: '#10b981',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Break-even',
+                    data: analysis.map(() => 0),
+                    borderColor: '#6366f1',
+                    borderDash: [3, 3],
+                    borderWidth: 1,
+                    fill: false,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                y: { title: { display: true, text: 'Meerwaarde (€)' } },
+                x: { title: { display: true, text: 'Verkoopprijs' } }
+            }
+        }
+    });
+
+    // Quantity Chart
+    const qtyCtx = document.getElementById('quantityChart').getContext('2d');
+    quantityChart = new Chart(qtyCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Max. stuks binnen vrijstelling',
+                data: maxShares,
+                backgroundColor: maxShares.map(s => s >= totalAvailable ? '#10b981' : '#3b82f6'),
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                y: {
+                    title: { display: true, text: 'Aantal stuks' },
+                    max: Math.ceil(totalAvailable * 1.1)
+                },
+                x: { title: { display: true, text: 'Verkoopprijs' } }
+            }
+        }
+    });
+}
+
+// Multi-year calculation
+document.getElementById('calculateMultiYearBtn').addEventListener('click', calculateMultiYear);
+
+async function calculateMultiYear() {
+    const salePrice = parseFloat(document.getElementById('myStartPrice').value);
+    const years = parseInt(document.getElementById('myYears').value);
+    const priceIncrease = parseFloat(document.getElementById('myPriceIncrease').value);
+
+    if (!salePrice || salePrice <= 0) {
+        alert('Voer een geldige startprijs in.');
+        return;
+    }
+
+    document.getElementById('calculateMultiYearBtn').textContent = 'Berekenen...';
+    document.getElementById('calculateMultiYearBtn').disabled = true;
+
+    try {
+        const response = await fetch('/api/multi-year-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                asset_id: assetId,
+                sale_price: salePrice,
+                years: years,
+                price_increase: priceIncrease,
+                strategy: selectedStrategy
+            })
+        });
+        const data = await response.json();
+
+        updateMultiYearResults(data);
+
+        document.getElementById('multiYearResults').style.display = 'block';
+        document.getElementById('multiYearResults').scrollIntoView({ behavior: 'smooth' });
+
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Er is een fout opgetreden.');
+    }
+
+    document.getElementById('calculateMultiYearBtn').textContent = 'Bereken Meerjarenplan';
+    document.getElementById('calculateMultiYearBtn').disabled = false;
+}
+
+function updateMultiYearResults(data) {
+    const plan = data.plan;
+    const lastYear = plan[plan.length - 1];
+
+    // Summary stats
+    document.getElementById('myTotalSold').textContent = lastYear.cumulative_sold + ' stuks';
+    document.getElementById('myTotalRevenue').textContent = formatCurrency(lastYear.cumulative_revenue);
+    document.getElementById('myTotalTax').textContent = formatCurrency(lastYear.cumulative_tax);
+    document.getElementById('myTotalNet').textContent = formatCurrency(lastYear.cumulative_revenue - lastYear.cumulative_tax);
+
+    // Table
+    const tbody = document.getElementById('multiYearTableBody');
+    tbody.innerHTML = '';
+
+    for (const row of plan) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><span class="year-badge">Jaar ${row.year}</span></td>
+            <td>${formatCurrency(row.price)}</td>
+            <td>${formatCurrency(row.limit)}</td>
+            <td>${row.units} stuks</td>
+            <td>${formatCurrency(row.revenue || 0)}</td>
+            <td class="${row.gain >= 0 ? 'text-success' : 'text-error'}">${formatCurrency(row.gain || 0)}</td>
+            <td class="${row.tax > 0 ? 'text-error' : ''}">${formatCurrency(row.tax || 0)}</td>
+            <td>${row.remaining} stuks</td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    // Total row
+    const totalTr = document.createElement('tr');
+    totalTr.className = 'total-row';
+    totalTr.innerHTML = `
+        <td colspan="3"><strong>Totaal</strong></td>
+        <td><strong>${lastYear.cumulative_sold} stuks</strong></td>
+        <td><strong>${formatCurrency(lastYear.cumulative_revenue)}</strong></td>
+        <td></td>
+        <td class="text-error"><strong>${formatCurrency(lastYear.cumulative_tax)}</strong></td>
+        <td></td>
+    `;
+    tbody.appendChild(totalTr);
+
+    // Chart
+    if (multiYearChart) multiYearChart.destroy();
+
+    const ctx = document.getElementById('multiYearChart').getContext('2d');
+    multiYearChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: plan.map(p => 'Jaar ' + p.year),
+            datasets: [
+                {
+                    label: 'Verkocht (stuks)',
+                    data: plan.map(p => p.units),
+                    backgroundColor: '#3b82f6',
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Meerwaarde (€)',
+                    data: plan.map(p => p.gain || 0),
+                    type: 'line',
+                    borderColor: '#10b981',
+                    backgroundColor: 'transparent',
+                    yAxisID: 'y1',
+                    tension: 0.3
+                },
+                {
+                    label: 'Vrijstelling (€)',
+                    data: plan.map(p => p.limit),
+                    type: 'line',
+                    borderColor: '#f59e0b',
+                    borderDash: [5, 5],
+                    backgroundColor: 'transparent',
+                    yAxisID: 'y1',
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    title: { display: true, text: 'Stuks' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    title: { display: true, text: 'Euro (€)' },
+                    grid: { drawOnChartArea: false }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

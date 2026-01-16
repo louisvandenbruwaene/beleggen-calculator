@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1>Welkom, {{ user.username }}</h1>
+        <p class="text-muted">Beheer uw portfolio's en bereken uw belastingoptimalisatie</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('createPortfolioModal')">
+        + Nieuw Portfolio
+    </button>
+</div>
+
+{% if user.portfolios %}
+<div class="portfolio-grid">
+    {% for portfolio in user.portfolios %}
+    <div class="portfolio-card">
+        <h3 class="portfolio-name">{{ portfolio.name }}</h3>
+        <p class="portfolio-meta">
+            {{ portfolio.assets|length }} asset(s) •
+            Aangemaakt {{ portfolio.created_at.strftime('%d/%m/%Y') }}
+        </p>
+        <div class="portfolio-actions">
+            <a href="{{ url_for('view_portfolio', portfolio_id=portfolio.id) }}"
+               class="btn btn-primary btn-sm">Openen</a>
+            <form method="POST" action="{{ url_for('delete_portfolio', portfolio_id=portfolio.id) }}"
+                  style="display: inline;"
+                  onsubmit="return confirm('Weet u zeker dat u dit portfolio wilt verwijderen?');">
+                <button type="submit" class="btn btn-secondary btn-sm">Verwijderen</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card text-center">
+    <p class="text-muted mb-md">U heeft nog geen portfolio's.</p>
+    <button class="btn btn-primary" onclick="openModal('createPortfolioModal')">
+        Maak uw eerste portfolio
+    </button>
+</div>
+{% endif %}
+
+<!-- Create Portfolio Modal -->
+<div class="modal-backdrop" id="createPortfolioModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">Nieuw Portfolio</h2>
+            <button class="modal-close" onclick="closeModal('createPortfolioModal')">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('create_portfolio') }}">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="portfolioName">Naam</label>
+                    <input type="text" id="portfolioName" name="name" class="form-input"
+                           placeholder="bijv. Aandelen 2024" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('createPortfolioModal')">
+                    Annuleren
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    Aanmaken
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card mt-lg">
+    <div class="info-box">
+        <div class="info-box-title">
+            <span>💡</span>
+            <span>Tip</span>
+        </div>
+        <p>
+            Voeg eerst een portfolio toe, daarna kunt u assets (aandelen) toevoegen met hun
+            aankoopgegevens. Vervolgens kunt u de calculator gebruiken om te berekenen
+            hoeveel u belastingvrij kunt verkopen.
+        </p>
+    </div>
+</div>
+{% endblock %}

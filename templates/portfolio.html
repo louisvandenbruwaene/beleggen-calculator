@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}{{ portfolio.name }}{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <a href="{{ url_for('dashboard') }}" class="text-muted" style="font-size: 0.875rem;">
+            ← Terug naar Dashboard
+        </a>
+        <h1>{{ portfolio.name }}</h1>
+        <p class="text-muted">Beheer uw assets en bereken verkoopscenario's</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('addAssetModal')">
+        + Asset Toevoegen
+    </button>
+</div>
+
+{% if portfolio.assets %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Assets</h2>
+        <p class="card-subtitle">Klik op een asset om de belastingcalculator te openen</p>
+    </div>
+
+    {% for asset in portfolio.assets %}
+    {% set lots = asset.get_lots() %}
+    {% set ns = namespace(total_qty=0, total_cost=0) %}
+    {% for lot in lots %}
+        {% set remaining = lot.get('remaining', lot.get('quantity', 0)) %}
+        {% set ns.total_qty = ns.total_qty + remaining %}
+        {% set ns.total_cost = ns.total_cost + remaining * lot.get('price', 0) %}
+    {% endfor %}
+
+    <div class="asset-item">
+        <div class="asset-info">
+            <div class="asset-name">{{ asset.name }}</div>
+            <div class="asset-details">
+                {% if asset.isin %}ISIN: {{ asset.isin }} • {% endif %}
+                {{ lots|length }} aankopen •
+                <span class="font-mono">{{ "%.0f"|format(ns.total_qty) }} stuks</span>
+            </div>
+        </div>
+        <div class="asset-actions">
+            <a href="{{ url_for('calculator', asset_id=asset.id) }}" class="btn btn-success btn-sm">
+                Calculator
+            </a>
+            <button class="btn btn-secondary btn-sm"
+                    onclick="openAddLotModal({{ asset.id }}, '{{ asset.name }}')">
+                + Aankoop
+            </button>
+            <form method="POST" action="{{ url_for('delete_asset', asset_id=asset.id) }}"
+                  style="display: inline;"
+                  onsubmit="return confirm('Weet u zeker dat u deze asset wilt verwijderen?');">
+                <button type="submit" class="btn btn-secondary btn-sm">×</button>
+            </form>
+        </div>
+    </div>
+
+    {% if lots %}
+    <div class="table-container" style="margin-left: 1rem; margin-bottom: 1rem;">
+        <table class="table" style="font-size: 0.8rem;">
+            <thead>
+                <tr>
+                    <th>Datum</th>
+                    <th class="table-number">Aantal</th>
+                    <th class="table-number">Prijs</th>
+                    <th class="table-number">Resterend</th>
+                    <th class="table-number">Waarde</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lot in lots %}
+                {% set remaining = lot.get('remaining', lot.quantity) %}
+                <tr>
+                    <td>{{ lot.date }}</td>
+                    <td class="table-number">{{ "%.0f"|format(lot.quantity) }}</td>
+                    <td class="table-number">€{{ "%.2f"|format(lot.price) }}</td>
+                    <td class="table-number">{{ "%.0f"|format(remaining) }}</td>
+                    <td class="table-number">€{{ "%.2f"|format(remaining * lot.price) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="card text-center">
+    <p class="text-muted mb-md">Dit portfolio heeft nog geen assets.</p>
+    <button class="btn btn-primary" onclick="openModal('addAssetModal')">
+        Voeg uw eerste asset toe
+    </button>
+</div>
+{% endif %}
+
+<!-- Add Asset Modal -->
+<div class="modal-backdrop" id="addAssetModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">Asset Toevoegen</h2>
+            <button class="modal-close" onclick="closeModal('addAssetModal')">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_asset', portfolio_id=portfolio.id) }}">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="assetName">Naam</label>
+                    <input type="text" id="assetName" name="name" class="form-input"
+                           placeholder="bijv. Apple Inc." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="assetIsin">ISIN (optioneel)</label>
+                    <input type="text" id="assetIsin" name="isin" class="form-input"
+                           placeholder="bijv. US0378331005">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addAssetModal')">
+                    Annuleren
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    Toevoegen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Lot Modal -->
+<div class="modal-backdrop" id="addLotModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title">Aankoop Toevoegen</h2>
+            <button class="modal-close" onclick="closeModal('addLotModal')">&times;</button>
+        </div>
+        <form id="addLotForm" method="POST" action="">
+            <input type="hidden" id="amountOnlyField" name="amount_only" value="false">
+            <div class="modal-body">
+                <p class="text-muted mb-md">Asset: <strong id="lotAssetName"></strong></p>
+
+                <!-- Purchase type tabs -->
+                <div class="tabs" style="margin-bottom: 1rem;">
+                    <button type="button" class="tab active" onclick="switchPurchaseMode('detailed')">
+                        Aantal + Prijs
+                    </button>
+                    <button type="button" class="tab" onclick="switchPurchaseMode('amount')">
+                        Alleen Bedrag
+                    </button>
+                </div>
+
+                <!-- Detailed mode (quantity + price) -->
+                <div id="detailedMode">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="lotQuantity">Aantal</label>
+                            <input type="number" id="lotQuantity" name="quantity" class="form-input"
+                                   placeholder="100" min="0.01" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="lotPrice">Aankoopprijs (€)</label>
+                            <input type="number" id="lotPrice" name="price" class="form-input"
+                                   placeholder="45.50" min="0.01" step="0.01">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Amount only mode -->
+                <div id="amountMode" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label" for="lotAmount">Ingelegd Bedrag (€)</label>
+                        <input type="number" id="lotAmount" name="amount" class="form-input"
+                               placeholder="1000.00" min="0.01" step="0.01">
+                        <p class="form-hint">Wordt opgeslagen als 1 eenheid met deze waarde</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="lotDate">Aankoopdatum</label>
+                    <input type="date" id="lotDate" name="date" class="form-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addLotModal')">
+                    Annuleren
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    Toevoegen
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddLotModal(assetId, assetName) {
+    document.getElementById('addLotForm').action = '/asset/' + assetId + '/lot/add';
+    document.getElementById('lotAssetName').textContent = assetName;
+    document.getElementById('lotDate').value = new Date().toISOString().split('T')[0];
+    switchPurchaseMode('detailed');
+    openModal('addLotModal');
+}
+
+function switchPurchaseMode(mode) {
+    const tabs = document.querySelectorAll('#addLotModal .tab');
+    tabs.forEach((tab, i) => tab.classList.toggle('active', (mode === 'detailed' && i === 0) || (mode === 'amount' && i === 1)));
+
+    const detailedMode = document.getElementById('detailedMode');
+    const amountMode = document.getElementById('amountMode');
+    const amountOnlyField = document.getElementById('amountOnlyField');
+
+    if (mode === 'detailed') {
+        detailedMode.style.display = 'block';
+        amountMode.style.display = 'none';
+        amountOnlyField.value = 'false';
+        document.getElementById('lotQuantity').required = true;
+        document.getElementById('lotPrice').required = true;
+        document.getElementById('lotAmount').required = false;
+    } else {
+        detailedMode.style.display = 'none';
+        amountMode.style.display = 'block';
+        amountOnlyField.value = 'true';
+        document.getElementById('lotQuantity').required = false;
+        document.getElementById('lotPrice').required = false;
+        document.getElementById('lotAmount').required = true;
+    }
+}
+</script>
+{% endblock %}

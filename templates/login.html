@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Inloggen{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <h1 class="auth-title">Inloggen</h1>
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label class="form-label" for="username">Gebruikersnaam</label>
+                <input type="text" id="username" name="username" class="form-input"
+                       placeholder="Uw gebruikersnaam" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Wachtwoord</label>
+                <input type="password" id="password" name="password" class="form-input"
+                       placeholder="Uw wachtwoord" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block btn-lg">
+                Inloggen
+            </button>
+        </form>
+
+        <p class="auth-footer">
+            Nog geen account?
+            <a href="{{ url_for('register') }}">Registreer hier</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

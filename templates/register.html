@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Registreren{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <h1 class="auth-title">Account Aanmaken</h1>
+
+        <form method="POST" action="{{ url_for('register') }}">
+            <div class="form-group">
+                <label class="form-label" for="username">Gebruikersnaam</label>
+                <input type="text" id="username" name="username" class="form-input"
+                       placeholder="Kies een gebruikersnaam" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="email">E-mailadres</label>
+                <input type="email" id="email" name="email" class="form-input"
+                       placeholder="uw@email.be" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Wachtwoord</label>
+                <input type="password" id="password" name="password" class="form-input"
+                       placeholder="Minimaal 8 tekens" required minlength="8">
+                <p class="form-hint">Minimaal 8 tekens</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="confirm">Bevestig Wachtwoord</label>
+                <input type="password" id="confirm" name="confirm" class="form-input"
+                       placeholder="Herhaal uw wachtwoord" required minlength="8">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block btn-lg">
+                Registreren
+            </button>
+        </form>
+
+        <p class="auth-footer">
+            Heeft u al een account?
+            <a href="{{ url_for('login') }}">Log hier in</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
