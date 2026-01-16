@@ -47,10 +47,12 @@ cipher = Fernet(ENCRYPTION_KEY)
 # =============================================================================
 # BELGIAN TAX CONSTANTS (Correct values from meerwaardebelasting)
 # =============================================================================
-BASE_LIMIT = 10000      # €10,000 tax-free per year (constant)
-BUFFER_ZONE = 1000      # €1,000 buffer above limit (if tax paid < €1,000)
+BASE_LIMIT = 10000      # €10,000 tax-free per year (base)
+CARRYOVER_AMOUNT = 1000 # €1,000 of unused exemption carries over per year
+MAX_LIMIT = 15000       # Maximum exemption with carryover (5 years unused)
 TAX_RATE = 0.10         # 10% tax on gains above limit
-# Note: No carryover system - limit is fixed at €10,000 each year
+# Carryover system: first €1,000 of unused exemption carries to next year
+# Maximum builds up to €15,000 if exemption is never used
 
 
 # =============================================================================
@@ -289,11 +291,16 @@ def calculate_yearly_limits(years):
     return [{'year': y + 1, 'limit': BASE_LIMIT} for y in range(years)]
 
 
-def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
+def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05, married=False, initial_carryover=0):
     """
-    Create multi-year sales plan.
-    With simplified rules: €10,000 tax-free each year, no carryover.
-    Sells up to €10,000 in gains each year.
+    Create multi-year sales plan with carryover system.
+
+    Carryover rules:
+    - Base: €10,000/year (€20,000 for married couples)
+    - Unused exemption (up to €1,000/year, €2,000 married) carries over
+    - Maximum: €15,000 (€30,000 married) after 5 years unused
+
+    Sells up to the yearly limit in gains each year.
     """
     plan = []
     remaining_lots = [lot.copy() for lot in lots]
@@ -301,6 +308,15 @@ def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
     for lot in remaining_lots:
         if 'remaining' not in lot:
             lot['remaining'] = lot['quantity']
+
+    # Married couples get double limits
+    multiplier = 2 if married else 1
+    base_limit = BASE_LIMIT * multiplier
+    carryover_per_year = CARRYOVER_AMOUNT * multiplier
+    max_limit = MAX_LIMIT * multiplier
+
+    # Track carryover
+    current_carryover = min(initial_carryover, max_limit - base_limit)
 
     total_sold = 0
     total_revenue = 0
@@ -310,11 +326,20 @@ def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
         current_price = sale_price * ((1 + price_increase) ** year)
         available = get_total_available(remaining_lots)
 
+        # This year's limit = base + carryover (capped at max)
+        yearly_limit = min(base_limit + current_carryover, max_limit)
+
         if available <= 0:
+            # No shares to sell - carryover increases (up to max)
+            unused = yearly_limit
+            new_carryover = min(current_carryover + min(unused, carryover_per_year), max_limit - base_limit)
+
             plan.append({
                 'year': year + 1,
                 'price': current_price,
-                'limit': BASE_LIMIT,
+                'limit': yearly_limit,
+                'carryover_used': 0,
+                'carryover_next': new_carryover,
                 'units': 0,
                 'revenue': 0,
                 'gain': 0,
@@ -326,10 +351,11 @@ def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
                 'cumulative_revenue': total_revenue,
                 'cumulative_tax': total_tax
             })
+            current_carryover = new_carryover
             continue
 
-        # Find max units to sell within €10,000 limit
-        units, gain = max_sellable_for_gain(remaining_lots, current_price, BASE_LIMIT)
+        # Find max units to sell within yearly limit
+        units, gain = max_sellable_for_gain(remaining_lots, current_price, yearly_limit)
 
         if units > 0:
             to_sell = units
@@ -346,17 +372,26 @@ def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
                 to_sell -= use
 
             revenue = units * current_price
-            taxable, tax = calculate_tax(gain, BASE_LIMIT)
+            taxable, tax = calculate_tax(gain, yearly_limit)
             net = revenue - tax
 
             total_sold += units
             total_revenue += revenue
             total_tax += tax
 
+            # Calculate carryover for next year
+            # Unused exemption (up to carryover_per_year) carries over
+            used_exemption = min(gain, yearly_limit)
+            unused = yearly_limit - used_exemption
+            carryover_to_add = min(unused, carryover_per_year)
+            new_carryover = min(carryover_to_add, max_limit - base_limit)
+
             plan.append({
                 'year': year + 1,
                 'price': current_price,
-                'limit': BASE_LIMIT,
+                'limit': yearly_limit,
+                'carryover_used': current_carryover,
+                'carryover_next': new_carryover,
                 'units': units,
                 'revenue': revenue,
                 'cost_basis': cost_basis,
@@ -369,11 +404,17 @@ def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
                 'cumulative_revenue': total_revenue,
                 'cumulative_tax': total_tax
             })
+            current_carryover = new_carryover
         else:
+            # No sale possible - carryover increases
+            new_carryover = min(current_carryover + carryover_per_year, max_limit - base_limit)
+
             plan.append({
                 'year': year + 1,
                 'price': current_price,
-                'limit': BASE_LIMIT,
+                'limit': yearly_limit,
+                'carryover_used': 0,
+                'carryover_next': new_carryover,
                 'units': 0,
                 'revenue': 0,
                 'gain': 0,
@@ -385,14 +426,16 @@ def plan_multi_year_sales(lots, sale_price, years, price_increase=0.05):
                 'cumulative_revenue': total_revenue,
                 'cumulative_tax': total_tax
             })
+            current_carryover = new_carryover
 
     return plan
 
 
-def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
+def plan_full_extraction(lots, sale_price, years, price_increase=0.05, married=False, initial_carryover=0):
     """
     Plan to extract everything over the given years.
-    Sells €10,000 in gains each year, then dumps rest in last year.
+    Sells within limit each year, then dumps rest in last year.
+    Includes carryover system for married couples support.
     """
     plan = []
     remaining_lots = [lot.copy() for lot in lots]
@@ -400,6 +443,14 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
     for lot in remaining_lots:
         if 'remaining' not in lot:
             lot['remaining'] = lot['quantity']
+
+    # Married couples get double limits
+    multiplier = 2 if married else 1
+    base_limit = BASE_LIMIT * multiplier
+    carryover_per_year = CARRYOVER_AMOUNT * multiplier
+    max_limit = MAX_LIMIT * multiplier
+
+    current_carryover = min(initial_carryover, max_limit - base_limit)
 
     total_sold = 0
     total_revenue = 0
@@ -409,11 +460,16 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
         current_price = sale_price * ((1 + price_increase) ** year)
         available = get_total_available(remaining_lots)
 
+        yearly_limit = min(base_limit + current_carryover, max_limit)
+
         if available <= 0:
+            new_carryover = min(current_carryover + carryover_per_year, max_limit - base_limit)
             plan.append({
                 'year': year + 1,
                 'price': current_price,
-                'limit': BASE_LIMIT,
+                'limit': yearly_limit,
+                'carryover_used': 0,
+                'carryover_next': new_carryover,
                 'units': 0,
                 'revenue': 0,
                 'gain': 0,
@@ -425,6 +481,7 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
                 'cumulative_revenue': total_revenue,
                 'cumulative_tax': total_tax
             })
+            current_carryover = new_carryover
             continue
 
         is_last_year = (year == years - 1)
@@ -433,8 +490,8 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
             # Last year: sell everything remaining
             units = int(available)
         else:
-            # Sell up to €10,000 in gains
-            units, _ = max_sellable_for_gain(remaining_lots, current_price, BASE_LIMIT)
+            # Sell within yearly limit
+            units, _ = max_sellable_for_gain(remaining_lots, current_price, yearly_limit)
 
         if units > 0:
             to_sell = units
@@ -452,17 +509,25 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
 
             revenue = units * current_price
             gain = revenue - cost_basis
-            taxable, tax = calculate_tax(gain, BASE_LIMIT)
+            taxable, tax = calculate_tax(gain, yearly_limit)
             net = revenue - tax
 
             total_sold += units
             total_revenue += revenue
             total_tax += tax
 
+            # Calculate carryover for next year
+            used_exemption = min(gain, yearly_limit)
+            unused = yearly_limit - used_exemption
+            carryover_to_add = min(unused, carryover_per_year)
+            new_carryover = min(carryover_to_add, max_limit - base_limit)
+
             plan.append({
                 'year': year + 1,
                 'price': current_price,
-                'limit': BASE_LIMIT,
+                'limit': yearly_limit,
+                'carryover_used': current_carryover,
+                'carryover_next': new_carryover,
                 'units': units,
                 'revenue': revenue,
                 'cost_basis': cost_basis,
@@ -475,11 +540,15 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
                 'cumulative_revenue': total_revenue,
                 'cumulative_tax': total_tax
             })
+            current_carryover = new_carryover
         else:
+            new_carryover = min(current_carryover + carryover_per_year, max_limit - base_limit)
             plan.append({
                 'year': year + 1,
                 'price': current_price,
-                'limit': BASE_LIMIT,
+                'limit': yearly_limit,
+                'carryover_used': 0,
+                'carryover_next': new_carryover,
                 'units': 0,
                 'revenue': 0,
                 'gain': 0,
@@ -491,6 +560,7 @@ def plan_full_extraction(lots, sale_price, years, price_increase=0.05):
                 'cumulative_revenue': total_revenue,
                 'cumulative_tax': total_tax
             })
+            current_carryover = new_carryover
 
     return plan
 
@@ -957,6 +1027,8 @@ def api_multi_year_plan():
         years = int(data.get('years', 3))
         price_increase = float(data.get('price_increase', 5)) / 100
         full_extraction = data.get('full_extraction', False)
+        married = data.get('married', False)
+        initial_carryover = float(data.get('initial_carryover', 0))
     except (ValueError, TypeError):
         return jsonify({'error': 'Ongeldige invoerwaarden'}), 400
 
@@ -971,18 +1043,24 @@ def api_multi_year_plan():
 
     lots = asset.get_lots()
 
+    # Calculate limits based on married status
+    multiplier = 2 if married else 1
+
     if full_extraction:
-        plan = plan_full_extraction(lots, sale_price, years, price_increase)
+        plan = plan_full_extraction(lots, sale_price, years, price_increase, married, initial_carryover)
     else:
-        plan = plan_multi_year_sales(lots, sale_price, years, price_increase)
+        plan = plan_multi_year_sales(lots, sale_price, years, price_increase, married, initial_carryover)
 
     return jsonify({
         'plan': plan,
         'full_extraction': full_extraction,
         'years': years,
         'price_increase': price_increase * 100,
-        'base_limit': BASE_LIMIT,
-        'tax_rate': TAX_RATE * 100
+        'base_limit': BASE_LIMIT * multiplier,
+        'max_limit': MAX_LIMIT * multiplier,
+        'carryover_per_year': CARRYOVER_AMOUNT * multiplier,
+        'tax_rate': TAX_RATE * 100,
+        'married': married
     })
 
 

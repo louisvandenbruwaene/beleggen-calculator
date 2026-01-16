@@ -11,10 +11,11 @@ Belgische meerwaardebelasting calculator voor beleggers. Berekent hoeveel aandel
 
 ## Belgische Belastingregels
 
-- **Vrijstelling**: €10.000/jaar belastingvrij
+- **Vrijstelling**: €10.000/jaar belastingvrij (basis)
+- **Overdracht**: Eerste €1.000 ongebruikte vrijstelling draagt over naar volgend jaar
+- **Maximum**: €15.000 (na 5 jaar zonder gebruik)
 - **Tarief**: 10% op meerwaarde boven vrijstelling
-- **Buffer**: €1.000 overdraagbaar
-- **Maximum**: €15.000
+- **Getrouwde koppels**: Verdubbeling van alle limieten (€20.000 basis, €2.000 overdracht, max €30.000)
 - **Principe**: FIFO (First In, First Out)
 
 ## Structuur
@@ -76,5 +77,9 @@ python app.py                    # http://localhost:5000
 
 ## Recente Fixes
 
-- **2025-01**: Race condition in registratie gefixt - portfolio kon aan verkeerde user gekoppeld worden bij gelijktijdige registraties
-- **2025-01**: "Gratis" verwijderd - app is altijd gratis
+- **2026-01**: Overdracht systeem toegevoegd (€1.000/jaar, max €15.000)
+- **2026-01**: Getrouwde koppels optie toegevoegd (verdubbelt alle limieten)
+- **2026-01**: UI verduidelijkt: eenmalige calc vs meerjarenplan
+- **2026-01**: Security hardening (session cookies, input validatie, division by zero fixes)
+- **2026-01**: Race condition in registratie gefixt
+- **2026-01**: "Gratis" verwijderd - app is altijd gratis

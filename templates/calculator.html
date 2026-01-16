@@ -36,12 +36,18 @@
         <span>Belgische Belastingregels</span>
     </div>
     <p>
-        <strong>Vrijstelling:</strong> €10.000 meerwaarde per jaar belastingvrij (aanpasbaar 0-15.000).
+        <strong>Vrijstelling:</strong> €10.000 meerwaarde per jaar belastingvrij.
         <strong>Tarief:</strong> {{ "%.0f"|format(tax_rate) }}% op meerwaarde boven de vrijstelling.
     </p>
     <p>
+        <strong>Overdracht:</strong> De eerste €1.000 van ongebruikte vrijstelling wordt overgedragen naar het volgende jaar.
+        Dit kan oplopen tot maximaal €15.000 vrijstelling (na 5 jaar zonder gebruik).
+    </p>
+    <p>
+        <strong>Getrouwde koppels:</strong> Mogen hun vrijstelling samenvoegen → €20.000 basis, €2.000 overdracht/jaar, max €30.000.
+    </p>
+    <p>
         <strong>FIFO-principe:</strong> Bij verkoop worden de oudste aankopen eerst verkocht, wat de kostprijs bepaalt.
-        <em>Let op: je mag niet het gemiddelde nemen van al je aankopen - de aankoopdata en aantallen zijn van belang!</em>
     </p>
 </div>
 
@@ -55,7 +61,11 @@
 <div class="tab-content active" id="tab-single">
     <div class="card">
         <div class="card-header">
-            <h2 class="card-title">Verkoopberekening</h2>
+            <h2 class="card-title">Eenmalige Verkoopberekening</h2>
+            <p class="card-subtitle">
+                Ideaal voor het berekenen van een specifiek scenario: hoeveel kun je verkopen bij een bepaalde prijs?
+                Gebruik dit als je niet per se alles wilt verkopen, maar flexibel wilt plannen.
+            </p>
         </div>
 
         <div class="form-row">
@@ -68,8 +78,8 @@
             <div class="form-group">
                 <label class="form-label" for="yearlyLimit">Jaarlijkse vrijstelling (€)</label>
                 <input type="number" id="yearlyLimit" class="form-input" value="10000"
-                       min="0" max="15000" step="1000">
-                <p class="form-hint">Standaard €10.000, aanpasbaar 0-15.000</p>
+                       min="0" max="20000" step="1000">
+                <p class="form-hint">Standaard €10.000, aanpasbaar 0-20.000</p>
             </div>
         </div>
 
@@ -273,7 +283,19 @@
     <div class="card">
         <div class="card-header">
             <h2 class="card-title">Meerjarenplanning</h2>
-            <p class="card-subtitle">Spreid je verkoop over meerdere jaren om belasting te minimaliseren</p>
+            <p class="card-subtitle">
+                Spreid je verkoop over meerdere jaren om belasting te minimaliseren.
+                Houdt rekening met de overdracht van ongebruikte vrijstelling (€1.000/jaar, max €15.000).
+            </p>
+        </div>
+
+        <!-- Married Couples Toggle -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label class="form-label" style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                <input type="checkbox" id="myMarried" style="width: 1.25rem; height: 1.25rem;">
+                <span>Getrouwd / Wettelijk samenwonend</span>
+            </label>
+            <p class="form-hint">Verdubbelt alle vrijstellingen: €20.000 basis, €2.000 overdracht/jaar, max €30.000</p>
         </div>
 
         <div class="form-row">
@@ -292,6 +314,9 @@
                     <option value="3" selected>3 jaren</option>
                     <option value="4">4 jaren</option>
                     <option value="5">5 jaren</option>
+                    <option value="6">6 jaren</option>
+                    <option value="7">7 jaren</option>
+                    <option value="10">10 jaren</option>
                 </select>
             </div>
             <div class="form-group">
@@ -299,6 +324,15 @@
                 <input type="number" id="myPriceIncrease" class="form-input"
                        value="5" min="-50" max="50" step="1">
                 <p class="form-hint">Negatief = prijsdaling</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="myCarryover">Huidige overgedragen vrijstelling (€)</label>
+                <input type="number" id="myCarryover" class="form-input"
+                       value="0" min="0" max="5000" step="100">
+                <p class="form-hint">Ongebruikte vrijstelling uit vorige jaren (0-5000)</p>
             </div>
         </div>
 
@@ -310,11 +344,11 @@
                     <span>Binnen Vrijstelling</span>
                 </div>
                 <p class="strategy-description">
-                    Verkoop elk jaar tot €10.000 meerwaarde, volledig belastingvrij.
+                    Verkoop elk jaar binnen de vrijstelling (incl. overdracht), volledig belastingvrij.
                     Geen belasting, maar duurt langer.
                 </p>
-                <div class="strategy-highlight">
-                    Elk jaar: max €10.000 meerwaarde → 0% belasting
+                <div class="strategy-highlight" id="strategyWithinLimit">
+                    Elk jaar: max vrijstelling → 0% belasting
                 </div>
             </div>
 
@@ -324,7 +358,7 @@
                     <span>Volledige Uitname</span>
                 </div>
                 <p class="strategy-description">
-                    Verkoop elk jaar €10.000 en alles in het laatste jaar.
+                    Verkoop binnen de vrijstelling en alles in het laatste jaar.
                     Sneller alles eruit, mogelijk met belasting.
                 </p>
                 <div class="strategy-highlight">
@@ -419,6 +453,21 @@ function selectStrategy(card) {
     card.classList.add('selected');
     selectedStrategy = card.dataset.strategy;
 }
+
+// Update strategy description when married status changes
+document.getElementById('myMarried').addEventListener('change', function() {
+    const married = this.checked;
+    const baseLimit = married ? '€20.000' : '€10.000';
+    const maxLimit = married ? '€30.000' : '€15.000';
+    document.getElementById('strategyWithinLimit').textContent = `Elk jaar: max ${baseLimit}-${maxLimit} → 0% belasting`;
+
+    // Update carryover max
+    const carryoverInput = document.getElementById('myCarryover');
+    carryoverInput.max = married ? 10000 : 5000;
+    if (parseFloat(carryoverInput.value) > (married ? 10000 : 5000)) {
+        carryoverInput.value = married ? 10000 : 5000;
+    }
+});
 
 // Format currency
 function formatCurrency(value) {
@@ -640,6 +689,8 @@ async function calculateMultiYear() {
     const salePrice = parseFloat(document.getElementById('myStartPrice').value);
     const years = parseInt(document.getElementById('myYears').value);
     const priceIncrease = parseFloat(document.getElementById('myPriceIncrease').value);
+    const married = document.getElementById('myMarried').checked;
+    const initialCarryover = parseFloat(document.getElementById('myCarryover').value) || 0;
 
     if (!salePrice || salePrice <= 0) {
         alert('Voer een geldige startprijs in.');
@@ -658,7 +709,9 @@ async function calculateMultiYear() {
                 sale_price: salePrice,
                 years: years,
                 price_increase: priceIncrease,
-                full_extraction: selectedStrategy === 'full_extraction'
+                full_extraction: selectedStrategy === 'full_extraction',
+                married: married,
+                initial_carryover: initialCarryover
             })
         });
         const data = await response.json();
@@ -680,6 +733,7 @@ async function calculateMultiYear() {
 function updateMultiYearResults(data) {
     const plan = data.plan;
     const lastYear = plan[plan.length - 1];
+    const married = data.married;
 
     // Summary stats
     document.getElementById('myTotalSold').textContent = lastYear.cumulative_sold + ' stuks';
@@ -693,10 +747,11 @@ function updateMultiYearResults(data) {
 
     for (const row of plan) {
         const tr = document.createElement('tr');
+        const carryoverInfo = row.carryover_used > 0 ? ` (+${formatCurrency(row.carryover_used)} overdracht)` : '';
         tr.innerHTML = `
             <td><span class="year-badge">Jaar ${row.year}</span></td>
             <td>${formatCurrency(row.price)}</td>
-            <td>${formatCurrency(row.limit)}</td>
+            <td>${formatCurrency(row.limit)}${carryoverInfo}</td>
             <td>${row.units} stuks</td>
             <td>${formatCurrency(row.revenue || 0)}</td>
             <td class="${row.gain >= 0 ? 'text-success' : 'text-error'}">${formatCurrency(row.gain || 0)}</td>
@@ -710,7 +765,7 @@ function updateMultiYearResults(data) {
     const totalTr = document.createElement('tr');
     totalTr.className = 'total-row';
     totalTr.innerHTML = `
-        <td colspan="3"><strong>Totaal</strong></td>
+        <td colspan="3"><strong>Totaal</strong>${married ? ' (getrouwd)' : ''}</td>
         <td><strong>${lastYear.cumulative_sold} stuks</strong></td>
         <td><strong>${formatCurrency(lastYear.cumulative_revenue)}</strong></td>
         <td></td>
@@ -722,6 +777,7 @@ function updateMultiYearResults(data) {
     // Chart - grouped bars
     if (multiYearChart) multiYearChart.destroy();
 
+    const baseLimit = data.base_limit;
     const ctx = document.getElementById('multiYearChart').getContext('2d');
     multiYearChart = new Chart(ctx, {
         type: 'bar',
@@ -729,7 +785,7 @@ function updateMultiYearResults(data) {
             labels: plan.map(p => 'Jaar ' + p.year),
             datasets: [
                 {
-                    label: 'Vrijstelling (€10.000)',
+                    label: `Vrijstelling (incl. overdracht)`,
                     data: plan.map(p => p.limit),
                     backgroundColor: '#10b981',
                     borderWidth: 0
