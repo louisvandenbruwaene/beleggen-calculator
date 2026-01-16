@@ -227,7 +227,7 @@ def calculate_tax(gain, yearly_limit=BASE_LIMIT):
     return taxable, tax
 
 
-def calculate_tax_with_buffer(gain, buffer_available=BUFFER_ZONE):
+def calculate_tax_with_buffer(gain, buffer_available=CARRYOVER_AMOUNT):
     """
     Calculate tax considering the €1,000 buffer zone.
     Returns: (taxable, tax, buffer_used, buffer_remaining)
@@ -247,7 +247,7 @@ def calculate_tax_with_buffer(gain, buffer_available=BUFFER_ZONE):
     tax = taxable * TAX_RATE
 
     # If tax >= €1,000, buffer resets to 0 for this calculation
-    buffer_remaining = 0 if tax >= BUFFER_ZONE else BUFFER_ZONE - excess
+    buffer_remaining = 0 if tax >= CARRYOVER_AMOUNT else CARRYOVER_AMOUNT - excess
 
     return taxable, tax, excess, max(0, buffer_remaining)
 
@@ -899,7 +899,7 @@ def calculator(asset_id):
                          total_cost=total_cost,
                          base_limit=BASE_LIMIT,
                          tax_rate=TAX_RATE * 100,
-                         buffer_zone=BUFFER_ZONE)
+                         buffer_zone=CARRYOVER_AMOUNT)
 
 
 @app.route('/api/calculate', methods=['POST'])
