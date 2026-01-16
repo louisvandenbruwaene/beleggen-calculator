@@ -19,6 +19,12 @@ import json
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
+# Session security for production
+if os.environ.get('RAILWAY_ENVIRONMENT') == 'production':
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
 # Database: use DATABASE_URL if available (Railway/Render), otherwise SQLite
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///beleggen.db')
 # Railway uses postgres:// but SQLAlchemy needs postgresql://
@@ -92,7 +98,9 @@ class Asset(db.Model):
         try:
             decrypted = cipher.decrypt(self.lots_encrypted.encode()).decode()
             return json.loads(decrypted)
-        except:
+        except (Exception,) as e:
+            # Log error in production, return empty for graceful degradation
+            app.logger.error(f"Failed to decrypt lots for asset {self.id}: {e}")
             return []
 
     def set_lots(self, lots):
@@ -247,6 +255,8 @@ def shares_for_target_revenue(lots, sale_price, target_revenue):
     Calculate how many shares to sell to get target_revenue (before tax).
     Returns (shares, actual_revenue, gain, cost_basis)
     """
+    if sale_price <= 0:
+        return 0, 0, 0, 0
     shares_needed = target_revenue / sale_price
     total_available = get_total_available(lots)
 
@@ -827,11 +837,23 @@ def calculator(asset_id):
 def api_calculate():
     """API endpoint for single-year calculations."""
     data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Geen data ontvangen'}), 400
+
     asset_id = data.get('asset_id')
-    sale_price = float(data.get('sale_price', 0))
-    quantity = data.get('quantity')
-    target_revenue = data.get('target_revenue')
-    yearly_limit = float(data.get('yearly_limit', BASE_LIMIT))
+    if not asset_id:
+        return jsonify({'error': 'Asset ID ontbreekt'}), 400
+
+    try:
+        sale_price = float(data.get('sale_price', 0))
+        quantity = data.get('quantity')
+        target_revenue = data.get('target_revenue')
+        yearly_limit = float(data.get('yearly_limit', BASE_LIMIT))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Ongeldige invoerwaarden'}), 400
+
+    if sale_price <= 0:
+        return jsonify({'error': 'Verkoopprijs moet positief zijn'}), 400
 
     asset = Asset.query.get_or_404(asset_id)
     if asset.portfolio.user_id != session['user_id']:
@@ -923,11 +945,25 @@ def api_calculate():
 def api_multi_year_plan():
     """API endpoint for multi-year planning."""
     data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Geen data ontvangen'}), 400
+
     asset_id = data.get('asset_id')
-    sale_price = float(data.get('sale_price', 0))
-    years = int(data.get('years', 3))
-    price_increase = float(data.get('price_increase', 5)) / 100
-    full_extraction = data.get('full_extraction', False)
+    if not asset_id:
+        return jsonify({'error': 'Asset ID ontbreekt'}), 400
+
+    try:
+        sale_price = float(data.get('sale_price', 0))
+        years = int(data.get('years', 3))
+        price_increase = float(data.get('price_increase', 5)) / 100
+        full_extraction = data.get('full_extraction', False)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Ongeldige invoerwaarden'}), 400
+
+    if sale_price <= 0:
+        return jsonify({'error': 'Verkoopprijs moet positief zijn'}), 400
+    if years <= 0 or years > 50:
+        return jsonify({'error': 'Jaren moet tussen 1 en 50 zijn'}), 400
 
     asset = Asset.query.get_or_404(asset_id)
     if asset.portfolio.user_id != session['user_id']:
@@ -955,11 +991,23 @@ def api_multi_year_plan():
 def api_chart_data():
     """API endpoint for chart data."""
     data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Geen data ontvangen'}), 400
+
     asset_id = data.get('asset_id')
-    min_price = float(data.get('min_price', 10))
-    max_price = float(data.get('max_price', 200))
-    steps = int(data.get('steps', 50))
-    yearly_limit = float(data.get('yearly_limit', BASE_LIMIT))
+    if not asset_id:
+        return jsonify({'error': 'Asset ID ontbreekt'}), 400
+
+    try:
+        min_price = float(data.get('min_price', 10))
+        max_price = float(data.get('max_price', 200))
+        steps = int(data.get('steps', 50))
+        yearly_limit = float(data.get('yearly_limit', BASE_LIMIT))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Ongeldige invoerwaarden'}), 400
+
+    if min_price < 0 or max_price <= min_price:
+        return jsonify({'error': 'Ongeldige prijsrange'}), 400
 
     asset = Asset.query.get_or_404(asset_id)
     if asset.portfolio.user_id != session['user_id']:
@@ -972,6 +1020,8 @@ def api_chart_data():
     if total_available == 0:
         return jsonify({'error': 'Geen data'}), 400
 
+    if steps <= 0:
+        steps = 50
     step_size = (max_price - min_price) / steps
     analysis = []
 
