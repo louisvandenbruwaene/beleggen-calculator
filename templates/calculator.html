@@ -36,11 +36,12 @@
         <span>Belgische Belastingregels</span>
     </div>
     <p>
-        <strong>Vrijstelling:</strong> €{{ "{:,.0f}".format(base_limit) }} meerwaarde per jaar belastingvrij.
+        <strong>Vrijstelling:</strong> €10.000 meerwaarde per jaar belastingvrij (aanpasbaar 0-15.000).
         <strong>Tarief:</strong> {{ "%.0f"|format(tax_rate) }}% op meerwaarde boven de vrijstelling.
     </p>
     <p>
-        <strong>FIFO:</strong> Bij verkoop worden de oudste aankopen eerst verkocht, wat de kostprijs bepaalt.
+        <strong>FIFO-principe:</strong> Bij verkoop worden de oudste aankopen eerst verkocht, wat de kostprijs bepaalt.
+        <em>Let op: je mag niet het gemiddelde nemen van al je aankopen - de aankoopdata en aantallen zijn van belang!</em>
     </p>
 </div>
 
@@ -66,9 +67,9 @@
             </div>
             <div class="form-group">
                 <label class="form-label" for="yearlyLimit">Jaarlijkse vrijstelling (€)</label>
-                <input type="number" id="yearlyLimit" class="form-input" value="10000" readonly
-                       style="background-color: var(--color-gray-100);">
-                <p class="form-hint">Vast bedrag: €10.000 per jaar</p>
+                <input type="number" id="yearlyLimit" class="form-input" value="10000"
+                       min="0" max="15000" step="1000">
+                <p class="form-hint">Standaard €10.000, aanpasbaar 0-15.000</p>
             </div>
         </div>
 
@@ -127,6 +128,10 @@
                         <span class="scenario-label">Netto Ontvangst</span>
                         <span class="scenario-value" id="s1Net">-</span>
                     </div>
+                    <div class="scenario-row" style="background: var(--color-gray-50); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
+                        <span class="scenario-label"><strong>Netto Winst (opbrengst - kostprijs)</strong></span>
+                        <span class="scenario-value text-success" id="s1Profit">-</span>
+                    </div>
                     <hr style="margin: 0.75rem 0; border-color: var(--color-gray-200);">
                     <div class="scenario-row">
                         <span class="scenario-label"><strong>Resterend in portefeuille</strong></span>
@@ -176,6 +181,10 @@
                     <div class="scenario-row">
                         <span class="scenario-label">Netto Ontvangst</span>
                         <span class="scenario-value" id="s2Net">-</span>
+                    </div>
+                    <div class="scenario-row" style="background: var(--color-gray-50); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
+                        <span class="scenario-label"><strong>Netto Winst (na belasting)</strong></span>
+                        <span class="scenario-value" id="s2Profit">-</span>
                     </div>
                 </div>
             </div>
@@ -269,10 +278,11 @@
 
         <div class="form-row">
             <div class="form-group">
-                <label class="form-label" for="myStartPrice">Startprijs per stuk (€)</label>
+                <label class="form-label" for="myStartPrice">Verkoopprijs jaar 1 (€/stuk)</label>
                 <input type="number" id="myStartPrice" class="form-input"
                        value="{{ "%.2f"|format(total_cost / total_available * 1.1 if total_available > 0 else 50) }}"
                        min="0.01" step="0.01">
+                <p class="form-hint">Prijs stijgt jaarlijks met onderstaand %</p>
             </div>
             <div class="form-group">
                 <label class="form-label" for="myYears">Aantal jaren</label>
@@ -287,7 +297,8 @@
             <div class="form-group">
                 <label class="form-label" for="myPriceIncrease">Jaarlijkse prijsstijging (%)</label>
                 <input type="number" id="myPriceIncrease" class="form-input"
-                       value="5" min="0" max="50" step="1">
+                       value="5" min="-50" max="50" step="1">
+                <p class="form-hint">Negatief = prijsdaling</p>
             </div>
         </div>
 
@@ -481,6 +492,7 @@ function updateScenarios(data) {
         const s1 = data.within_limit;
         const remaining = totalAvailable - s1.units;
         const remainingValue = remaining * salePrice;
+        const profit = s1.revenue - s1.cost_basis;  // Netto winst = opbrengst - kostprijs
 
         document.getElementById('s1Quantity').textContent = s1.units + ' stuks';
         document.getElementById('s1Revenue').textContent = formatCurrency(s1.revenue);
@@ -488,6 +500,8 @@ function updateScenarios(data) {
         document.getElementById('s1Gain').textContent = formatCurrency(s1.gain);
         document.getElementById('s1Gain').className = 'scenario-value ' + (s1.gain >= 0 ? 'text-success' : 'text-error');
         document.getElementById('s1Net').textContent = formatCurrency(s1.net);
+        document.getElementById('s1Profit').textContent = formatCurrency(profit);
+        document.getElementById('s1Profit').className = 'scenario-value ' + (profit >= 0 ? 'text-success' : 'text-error');
         document.getElementById('s1Remaining').textContent = remaining + ' stuks';
         document.getElementById('s1RemainingValue').textContent = formatCurrency(remainingValue);
     }
@@ -495,6 +509,8 @@ function updateScenarios(data) {
     // Scenario 2: Sell all
     if (data.sell_all) {
         const s2 = data.sell_all;
+        const profit2 = s2.revenue - s2.cost_basis - s2.tax;  // Netto winst na belasting
+
         document.getElementById('s2Quantity').textContent = s2.units + ' stuks';
         document.getElementById('s2Revenue').textContent = formatCurrency(s2.revenue);
         document.getElementById('s2CostBasis').textContent = formatCurrency(s2.cost_basis);
@@ -503,6 +519,8 @@ function updateScenarios(data) {
         document.getElementById('s2Taxable').textContent = formatCurrency(s2.taxable);
         document.getElementById('s2Tax').textContent = formatCurrency(s2.tax);
         document.getElementById('s2Net').textContent = formatCurrency(s2.net);
+        document.getElementById('s2Profit').textContent = formatCurrency(profit2);
+        document.getElementById('s2Profit').className = 'scenario-value ' + (profit2 >= 0 ? 'text-success' : 'text-error');
 
         const badge = document.getElementById('s2Badge');
         const card = document.getElementById('scenario2');
