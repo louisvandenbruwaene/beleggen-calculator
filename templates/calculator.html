@@ -37,8 +37,6 @@
     </div>
     <p>
         <strong>Vrijstelling:</strong> €{{ "{:,.0f}".format(base_limit) }} meerwaarde per jaar belastingvrij.
-        <strong>Overdracht:</strong> Ongebruikte ruimte (max €{{ "{:,.0f}".format(carryover_max) }}) mag naar volgend jaar.
-        <strong>Maximum:</strong> €{{ "{:,.0f}".format(absolute_max) }} met volledige opbouw.
         <strong>Tarief:</strong> {{ "%.0f"|format(tax_rate) }}% op meerwaarde boven de vrijstelling.
     </p>
     <p>
@@ -68,14 +66,9 @@
             </div>
             <div class="form-group">
                 <label class="form-label" for="yearlyLimit">Jaarlijkse vrijstelling (€)</label>
-                <select id="yearlyLimit" class="form-input">
-                    <option value="10000">€10.000 (jaar 1)</option>
-                    <option value="11000">€11.000 (jaar 2, met €1.000 overdracht)</option>
-                    <option value="12000">€12.000 (jaar 3)</option>
-                    <option value="13000">€13.000 (jaar 4)</option>
-                    <option value="14000">€14.000 (jaar 5)</option>
-                    <option value="15000">€15.000 (maximum)</option>
-                </select>
+                <input type="number" id="yearlyLimit" class="form-input" value="10000" readonly
+                       style="background-color: var(--color-gray-100);">
+                <p class="form-hint">Vast bedrag: €10.000 per jaar</p>
             </div>
         </div>
 
@@ -295,17 +288,17 @@
 
         <h3 class="mb-md">Kies Strategie</h3>
         <div class="strategy-grid">
-            <div class="strategy-card selected" data-strategy="build_carryover" onclick="selectStrategy(this)">
+            <div class="strategy-card selected" data-strategy="within_limit" onclick="selectStrategy(this)">
                 <div class="strategy-title">
                     <span>📈</span>
-                    <span>Opbouw Overdracht</span>
+                    <span>Binnen Vrijstelling</span>
                 </div>
                 <p class="strategy-description">
-                    Blijf elk jaar €1.000 onder de vrijstelling om overdracht op te bouwen.
-                    Ideaal als u niet alles hoeft te verkopen.
+                    Verkoop elk jaar tot €10.000 meerwaarde, volledig belastingvrij.
+                    Geen belasting, maar duurt langer.
                 </p>
                 <div class="strategy-highlight">
-                    Jaar 1: €9.000 → Jaar 2: €10.000 → Jaar 3: €11.000 → ...
+                    Elk jaar: max €10.000 meerwaarde → 0% belasting
                 </div>
             </div>
 
@@ -315,11 +308,11 @@
                     <span>Volledige Uitname</span>
                 </div>
                 <p class="strategy-description">
-                    Gebruik de volledige vrijstelling en verkoop alles in het laatste jaar.
-                    Minimale belasting bij volledige liquidatie.
+                    Verkoop elk jaar €10.000 en alles in het laatste jaar.
+                    Sneller alles eruit, mogelijk met belasting.
                 </p>
                 <div class="strategy-highlight">
-                    Optimaal voor maximale uitname met minimale belasting
+                    Laatste jaar: volledige verkoop, 10% op overschot
                 </div>
             </div>
         </div>
@@ -391,7 +384,7 @@ const baseLimit = {{ base_limit }};
 let gainChart = null;
 let quantityChart = null;
 let multiYearChart = null;
-let selectedStrategy = 'build_carryover';
+let selectedStrategy = 'within_limit';
 
 // Tab switching
 function showTab(tabId) {
@@ -662,7 +655,7 @@ async function calculateMultiYear() {
                 sale_price: salePrice,
                 years: years,
                 price_increase: priceIncrease,
-                strategy: selectedStrategy
+                full_extraction: selectedStrategy === 'full_extraction'
             })
         });
         const data = await response.json();
