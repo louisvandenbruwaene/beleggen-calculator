@@ -541,8 +541,9 @@ def register():
         user = User(username=username, email=email)
         user.set_password(password)
         db.session.add(user)
+        db.session.flush()  # Assign user.id before creating portfolio
 
-        portfolio = Portfolio(name='Mijn Portfolio', owner=user)
+        portfolio = Portfolio(name='Mijn Portfolio', user_id=user.id)
         db.session.add(portfolio)
         db.session.commit()
 
