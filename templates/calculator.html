@@ -100,11 +100,11 @@
             <!-- Scenario 1: Within Limit -->
             <div class="scenario-card within-limit" id="scenario1">
                 <div class="scenario-title">
-                    <span>Scenario 1: Binnen Vrijstelling</span>
-                    <span class="scenario-badge badge-success">Geen Belasting</span>
+                    <span>Belastingvrij Verkopen</span>
+                    <span class="scenario-badge badge-success">0% Belasting</span>
                 </div>
                 <p class="text-muted mb-md" style="font-size: 0.875rem;">
-                    Maximum te verkopen zonder de vrijstelling te overschrijden
+                    Maximaal aantal dat je kunt verkopen zonder belasting te betalen
                 </p>
                 <div class="scenario-details">
                     <div class="scenario-row">
@@ -127,17 +127,26 @@
                         <span class="scenario-label">Netto Ontvangst</span>
                         <span class="scenario-value" id="s1Net">-</span>
                     </div>
+                    <hr style="margin: 0.75rem 0; border-color: var(--color-gray-200);">
+                    <div class="scenario-row">
+                        <span class="scenario-label"><strong>Resterend in portefeuille</strong></span>
+                        <span class="scenario-value" id="s1Remaining">-</span>
+                    </div>
+                    <div class="scenario-row">
+                        <span class="scenario-label">Resterende waarde (geschat)</span>
+                        <span class="scenario-value" id="s1RemainingValue">-</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Scenario 2: Sell All -->
             <div class="scenario-card" id="scenario2">
                 <div class="scenario-title">
-                    <span>Scenario 2: Volledige Verkoop</span>
+                    <span>Alles Verkopen</span>
                     <span class="scenario-badge" id="s2Badge">-</span>
                 </div>
                 <p class="text-muted mb-md" style="font-size: 0.875rem;">
-                    Alle beschikbare aandelen verkopen
+                    Volledige portefeuille in één keer verkopen
                 </p>
                 <div class="scenario-details">
                     <div class="scenario-row">
@@ -235,19 +244,15 @@
             </div>
         </div>
 
-        <!-- Charts -->
-        <div class="calculator-grid mt-lg">
+        <!-- Chart -->
+        <div class="mt-lg">
             <div class="chart-container">
-                <h3 class="chart-title">Meerwaarde per Verkoopprijs</h3>
+                <h3 class="chart-title">Meerwaarde bij Volledige Verkoop</h3>
+                <p class="text-muted" style="font-size: 0.875rem; margin-bottom: 1rem;">
+                    Toont de meerwaarde als je alles verkoopt bij verschillende prijzen. De groene lijn is de vrijstellingsgrens (€10.000).
+                </p>
                 <div class="chart-wrapper">
                     <canvas id="gainChart"></canvas>
-                </div>
-            </div>
-
-            <div class="chart-container">
-                <h3 class="chart-title">Max. Verkoop Binnen Vrijstelling</h3>
-                <div class="chart-wrapper">
-                    <canvas id="quantityChart"></canvas>
                 </div>
             </div>
         </div>
@@ -259,7 +264,7 @@
     <div class="card">
         <div class="card-header">
             <h2 class="card-title">Meerjarenplanning</h2>
-            <p class="card-subtitle">Plan uw verkoop over meerdere jaren voor optimale belastingefficiëntie</p>
+            <p class="card-subtitle">Spreid je verkoop over meerdere jaren om belasting te minimaliseren</p>
         </div>
 
         <div class="form-row">
@@ -351,8 +356,8 @@
                     <thead>
                         <tr>
                             <th>Jaar</th>
-                            <th>Prijs</th>
-                            <th>Vrijstelling</th>
+                            <th>Prijs/stuk</th>
+                            <th>Max. Vrijstelling</th>
                             <th>Verkoop</th>
                             <th>Opbrengst</th>
                             <th>Meerwaarde</th>
@@ -367,7 +372,10 @@
         </div>
 
         <div class="chart-container mt-lg">
-            <h3 class="chart-title">Verkoop per Jaar</h3>
+            <h3 class="chart-title">Overzicht per Jaar</h3>
+            <p class="text-muted" style="font-size: 0.875rem; margin-bottom: 1rem;">
+                Vergelijking van vrijstelling, meerwaarde en opbrengst per jaar.
+            </p>
             <div class="chart-wrapper">
                 <canvas id="multiYearChart"></canvas>
             </div>
@@ -382,7 +390,6 @@ const totalCost = {{ total_cost }};
 const baseLimit = {{ base_limit }};
 
 let gainChart = null;
-let quantityChart = null;
 let multiYearChart = null;
 let selectedStrategy = 'within_limit';
 
@@ -467,15 +474,22 @@ async function calculate() {
 }
 
 function updateScenarios(data) {
+    const salePrice = parseFloat(document.getElementById('salePrice').value);
+
     // Scenario 1: Within limit
     if (data.within_limit) {
         const s1 = data.within_limit;
+        const remaining = totalAvailable - s1.units;
+        const remainingValue = remaining * salePrice;
+
         document.getElementById('s1Quantity').textContent = s1.units + ' stuks';
         document.getElementById('s1Revenue').textContent = formatCurrency(s1.revenue);
         document.getElementById('s1CostBasis').textContent = formatCurrency(s1.cost_basis);
         document.getElementById('s1Gain').textContent = formatCurrency(s1.gain);
         document.getElementById('s1Gain').className = 'scenario-value ' + (s1.gain >= 0 ? 'text-success' : 'text-error');
         document.getElementById('s1Net').textContent = formatCurrency(s1.net);
+        document.getElementById('s1Remaining').textContent = remaining + ' stuks';
+        document.getElementById('s1RemainingValue').textContent = formatCurrency(remainingValue);
     }
 
     // Scenario 2: Sell all
@@ -546,12 +560,10 @@ function updateCharts(data, currentPrice) {
     const analysis = data.analysis;
     const labels = analysis.map(d => '€' + d.price.toFixed(0));
     const gains = analysis.map(d => d.gain_if_sell_all);
-    const maxShares = analysis.map(d => d.max_units_within_limit);
 
     if (gainChart) gainChart.destroy();
-    if (quantityChart) quantityChart.destroy();
 
-    // Gain Chart
+    // Gain Chart - straight lines
     const gainCtx = document.getElementById('gainChart').getContext('2d');
     gainChart = new Chart(gainCtx, {
         type: 'line',
@@ -559,30 +571,32 @@ function updateCharts(data, currentPrice) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Meerwaarde (volledige verkoop)',
+                    label: 'Meerwaarde',
                     data: gains,
                     borderColor: '#3b82f6',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     fill: true,
-                    tension: 0.3,
-                    pointRadius: 2
+                    tension: 0,  // Straight lines
+                    pointRadius: 3,
+                    borderWidth: 2
                 },
                 {
-                    label: 'Vrijstelling €' + data.yearly_limit.toLocaleString(),
+                    label: 'Vrijstelling (€10.000)',
                     data: analysis.map(() => data.yearly_limit),
                     borderColor: '#10b981',
-                    borderDash: [5, 5],
                     borderWidth: 2,
                     fill: false,
+                    tension: 0,
                     pointRadius: 0
                 },
                 {
-                    label: 'Break-even',
+                    label: 'Break-even (€0)',
                     data: analysis.map(() => 0),
-                    borderColor: '#6366f1',
-                    borderDash: [3, 3],
+                    borderColor: '#9ca3af',
+                    borderDash: [5, 5],
                     borderWidth: 1,
                     fill: false,
+                    tension: 0,
                     pointRadius: 0
                 }
             ]
@@ -595,36 +609,7 @@ function updateCharts(data, currentPrice) {
             },
             scales: {
                 y: { title: { display: true, text: 'Meerwaarde (€)' } },
-                x: { title: { display: true, text: 'Verkoopprijs' } }
-            }
-        }
-    });
-
-    // Quantity Chart
-    const qtyCtx = document.getElementById('quantityChart').getContext('2d');
-    quantityChart = new Chart(qtyCtx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Max. stuks binnen vrijstelling',
-                data: maxShares,
-                backgroundColor: maxShares.map(s => s >= totalAvailable ? '#10b981' : '#3b82f6'),
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'bottom' }
-            },
-            scales: {
-                y: {
-                    title: { display: true, text: 'Aantal stuks' },
-                    max: Math.ceil(totalAvailable * 1.1)
-                },
-                x: { title: { display: true, text: 'Verkoopprijs' } }
+                x: { title: { display: true, text: 'Verkoopprijs per stuk' } }
             }
         }
     });
@@ -716,7 +701,7 @@ function updateMultiYearResults(data) {
     `;
     tbody.appendChild(totalTr);
 
-    // Chart
+    // Chart - grouped bars
     if (multiYearChart) multiYearChart.destroy();
 
     const ctx = document.getElementById('multiYearChart').getContext('2d');
@@ -726,29 +711,22 @@ function updateMultiYearResults(data) {
             labels: plan.map(p => 'Jaar ' + p.year),
             datasets: [
                 {
-                    label: 'Verkocht (stuks)',
-                    data: plan.map(p => p.units),
-                    backgroundColor: '#3b82f6',
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Meerwaarde (€)',
-                    data: plan.map(p => p.gain || 0),
-                    type: 'line',
-                    borderColor: '#10b981',
-                    backgroundColor: 'transparent',
-                    yAxisID: 'y1',
-                    tension: 0.3
-                },
-                {
-                    label: 'Vrijstelling (€)',
+                    label: 'Vrijstelling (€10.000)',
                     data: plan.map(p => p.limit),
-                    type: 'line',
-                    borderColor: '#f59e0b',
-                    borderDash: [5, 5],
-                    backgroundColor: 'transparent',
-                    yAxisID: 'y1',
-                    pointRadius: 0
+                    backgroundColor: '#10b981',
+                    borderWidth: 0
+                },
+                {
+                    label: 'Meerwaarde',
+                    data: plan.map(p => p.gain || 0),
+                    backgroundColor: '#3b82f6',
+                    borderWidth: 0
+                },
+                {
+                    label: 'Opbrengst',
+                    data: plan.map(p => p.revenue || 0),
+                    backgroundColor: '#8b5cf6',
+                    borderWidth: 0
                 }
             ]
         },
@@ -760,15 +738,11 @@ function updateMultiYearResults(data) {
             },
             scales: {
                 y: {
-                    type: 'linear',
-                    position: 'left',
-                    title: { display: true, text: 'Stuks' }
+                    title: { display: true, text: 'Bedrag (€)' },
+                    beginAtZero: true
                 },
-                y1: {
-                    type: 'linear',
-                    position: 'right',
-                    title: { display: true, text: 'Euro (€)' },
-                    grid: { drawOnChartArea: false }
+                x: {
+                    title: { display: true, text: 'Jaar' }
                 }
             }
         }
